@@ -1,0 +1,148 @@
+<!doctype html>
+<html lang="nl">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <meta name="theme-color" content="#090b10" />
+  <title>GG.Chat — jouw community</title>
+  <meta name="description" content="GG.Chat social media platform" />
+  <link rel="preconnect" href="https://fonts.googleapis.com">
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+  <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800&display=swap" rel="stylesheet">
+  <link rel="stylesheet" href="style.css" />
+  <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+  <script src="https://unpkg.com/lucide@0.468.0/dist/umd/lucide.min.js"></script>
+</head>
+<body>
+  <div id="toastHost" class="toast-host"></div>
+
+  <section id="authScreen" class="auth-screen">
+    <div class="auth-orb orb-a"></div>
+    <div class="auth-orb orb-b"></div>
+    <div class="auth-brand">
+      <div class="brand-logo large">GG</div>
+      <div>
+        <h1>GG.Chat</h1>
+        <p>Praat. Deel. Ontdek.</p>
+      </div>
+    </div>
+
+    <div class="auth-layout">
+      <div class="auth-hero">
+        <span class="eyebrow">NIEUW SOCIAAL PLATFORM</span>
+        <h2>Jouw plek op het internet.</h2>
+        <p>Maak een profiel, volg vrienden, plaats updates en stuur realtime privéberichten. Alles in één strakke community.</p>
+        <div class="hero-preview glass-card">
+          <div class="fake-avatar gradient-avatar">M</div>
+          <div class="preview-copy">
+            <strong>Mila <span class="verified">✓</span></strong>
+            <span>@mila · zojuist</span>
+            <p>Net mijn GG.Chat-profiel afgemaakt ✨</p>
+          </div>
+          <div class="preview-stats"><span>♡ 124</span><span>◌ 18</span></div>
+        </div>
+      </div>
+
+      <div class="auth-card glass-card">
+        <div class="auth-tabs">
+          <button class="auth-tab active" data-auth-tab="login">Inloggen</button>
+          <button class="auth-tab" data-auth-tab="register">Account maken</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>E-mailadres<input id="loginEmail" type="email" autocomplete="email" placeholder="jij@voorbeeld.nl" required></label>
+          <label>Wachtwoord<input id="loginPassword" type="password" autocomplete="current-password" placeholder="••••••••" minlength="6" required></label>
+          <button class="primary-btn full" type="submit"><span>Inloggen</span><i data-lucide="arrow-right"></i></button>
+          <button id="forgotPasswordBtn" class="link-btn" type="button">Wachtwoord vergeten?</button>
+        </form>
+
+        <form id="registerForm" class="auth-form hidden">
+          <div class="form-grid-2">
+            <label>Weergavenaam<input id="registerName" type="text" placeholder="Levi" maxlength="40" required></label>
+            <label>Gebruikersnaam<input id="registerUsername" type="text" placeholder="levi" maxlength="24" pattern="[A-Za-z0-9_.]+" required></label>
+          </div>
+          <label>E-mailadres<input id="registerEmail" type="email" placeholder="jij@voorbeeld.nl" required></label>
+          <label>Wachtwoord<input id="registerPassword" type="password" placeholder="Minimaal 6 tekens" minlength="6" required></label>
+          <button class="primary-btn full" type="submit"><span>Maak mijn account</span><i data-lucide="sparkles"></i></button>
+          <small>Door verder te gaan ga je akkoord met de communityregels.</small>
+        </form>
+      </div>
+    </div>
+  </section>
+
+  <div id="app" class="app-shell hidden">
+    <aside class="sidebar">
+      <button class="logo-button" data-route="home"><span class="brand-logo">GG</span><span class="logo-text">GG.Chat</span></button>
+      <nav class="main-nav">
+        <button class="nav-item active" data-route="home"><i data-lucide="house"></i><span>Home</span></button>
+        <button class="nav-item" data-route="explore"><i data-lucide="compass"></i><span>Ontdekken</span></button>
+        <button class="nav-item" data-route="messages"><i data-lucide="message-circle"></i><span>Berichten</span><b id="dmUnreadBadge" class="nav-badge hidden">0</b></button>
+        <button class="nav-item" data-route="notifications"><i data-lucide="bell"></i><span>Meldingen</span><b id="notificationBadge" class="nav-badge hidden">0</b></button>
+        <button class="nav-item" data-route="profile"><i data-lucide="user-round"></i><span>Profiel</span></button>
+        <button class="nav-item" data-route="settings"><i data-lucide="settings"></i><span>Instellingen</span></button>
+      </nav>
+      <button id="composeSidebarBtn" class="primary-btn compose-btn"><i data-lucide="plus"></i><span>Nieuw bericht</span></button>
+      <div id="sidebarAccount" class="sidebar-account"></div>
+    </aside>
+
+    <main class="main-column">
+      <header class="mobile-topbar">
+        <button class="logo-button" data-route="home"><span class="brand-logo">GG</span></button>
+        <strong id="mobileTitle">Home</strong>
+        <button id="mobileProfileBtn" class="icon-btn"><i data-lucide="user-round"></i></button>
+      </header>
+      <div id="pageContent"></div>
+    </main>
+
+    <aside class="rightbar">
+      <div class="search-box">
+        <i data-lucide="search"></i>
+        <input id="globalSearch" type="search" placeholder="Zoeken op GG.Chat" autocomplete="off">
+        <kbd>/</kbd>
+      </div>
+      <div id="searchDropdown" class="search-dropdown hidden"></div>
+
+      <section class="side-card">
+        <div class="side-card-title"><h3>Voor jou</h3><button data-route="explore">Alles</button></div>
+        <div id="suggestedUsers" class="suggested-users"><div class="skeleton-row"></div><div class="skeleton-row"></div></div>
+      </section>
+
+      <section class="side-card trends-card">
+        <div class="side-card-title"><h3>Trending</h3></div>
+        <button class="trend"><span>Trending in Nederland</span><strong>#GGChat</strong><small>2,4K berichten</small></button>
+        <button class="trend"><span>Gaming</span><strong>#Minecraft</strong><small>1,1K berichten</small></button>
+        <button class="trend"><span>Community</span><strong>#NieuwHier</strong><small>684 berichten</small></button>
+      </section>
+
+      <footer class="mini-footer">© 2026 GG.Chat · Privacy · Voorwaarden · Community</footer>
+    </aside>
+
+    <nav class="mobile-nav">
+      <button class="active" data-route="home"><i data-lucide="house"></i></button>
+      <button data-route="explore"><i data-lucide="search"></i></button>
+      <button id="mobileComposeBtn" class="mobile-compose"><i data-lucide="plus"></i></button>
+      <button data-route="messages"><i data-lucide="message-circle"></i></button>
+      <button data-route="profile"><i data-lucide="user-round"></i></button>
+    </nav>
+  </div>
+
+  <div id="modalBackdrop" class="modal-backdrop hidden">
+    <div id="modal" class="modal-card"></div>
+  </div>
+
+  <template id="postTemplate">
+    <article class="post-card">
+      <div class="post-avatar-wrap"></div>
+      <div class="post-main">
+        <div class="post-head"></div>
+        <div class="post-body"></div>
+        <div class="post-media"></div>
+        <div class="post-actions"></div>
+      </div>
+    </article>
+  </template>
+
+  <script src="config.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
