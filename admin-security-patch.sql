@@ -3,6 +3,19 @@
 -- This lets ONLY authenticated admin RPCs update protected profile fields.
 -- Normal browser updates still cannot self-promote or self-verify.
 
+create or replace function public.admin_ui_allowed()
+returns boolean
+language sql
+stable
+security definer
+set search_path=public,private
+as $$
+  select auth.uid() is not null
+     and private.is_role_admin(auth.uid())
+     and exists(select 1 from private.admin_credentials c where c.user_id=auth.uid());
+$$;
+grant execute on function public.admin_ui_allowed() to authenticated;
+
 create or replace function public.protect_profile_privileges()
 returns trigger
 language plpgsql
@@ -89,7 +102,6 @@ $$;
 
 grant execute on function public.admin_update_user(text,uuid,boolean,text,boolean,text,boolean,boolean) to authenticated;
 
--- Extra helper: use only if you need to completely remove a user's public social profile.
 create or replace function public.admin_delete_profile(p_token text,p_user uuid)
 returns void
 language plpgsql
