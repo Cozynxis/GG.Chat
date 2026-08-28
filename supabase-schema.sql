@@ -1,5 +1,5 @@
 -- GG.Chat database schema for Supabase
--- Run this entire file once in Supabase > SQL Editor.
+-- Safe to re-run. Existing tables/data are preserved; policies and triggers are recreated.
 
 create extension if not exists pgcrypto;
 
@@ -97,7 +97,6 @@ create index if not exists idx_messages_conversation on public.messages(conversa
 create index if not exists idx_notifications_user on public.notifications(user_id,created_at desc);
 create index if not exists idx_profiles_username_lower on public.profiles(lower(username));
 
--- Automatically create a profile when a new auth account is registered.
 create or replace function public.handle_new_user()
 returns trigger
 language plpgsql
@@ -126,7 +125,6 @@ drop trigger if exists on_auth_user_created on auth.users;
 create trigger on_auth_user_created after insert on auth.users
 for each row execute procedure public.handle_new_user();
 
--- A browser user may never grant their own verified badge, badge text or role.
 create or replace function public.protect_profile_privileges()
 returns trigger
 language plpgsql
@@ -172,7 +170,6 @@ as $$
       or public.is_conversation_member(cid,auth.uid());
 $$;
 
--- Keep conversation updated_at fresh when a message arrives.
 create or replace function public.touch_conversation()
 returns trigger
 language plpgsql
@@ -188,7 +185,6 @@ drop trigger if exists touch_conversation_on_message on public.messages;
 create trigger touch_conversation_on_message after insert on public.messages
 for each row execute procedure public.touch_conversation();
 
--- Notification triggers.
 create or replace function public.notify_follow()
 returns trigger language plpgsql security definer set search_path=public as $$
 begin
@@ -252,6 +248,46 @@ alter table public.conversation_members enable row level security;
 alter table public.messages enable row level security;
 alter table public.notifications enable row level security;
 
+-- Drop policies first so this file can be safely executed more than once.
+drop policy if exists "profiles public read" on public.profiles;
+drop policy if exists "profiles own insert" on public.profiles;
+drop policy if exists "profiles own update" on public.profiles;
+drop policy if exists "profiles own delete" on public.profiles;
+
+drop policy if exists "posts public read" on public.posts;
+drop policy if exists "posts own insert" on public.posts;
+drop policy if exists "posts own update" on public.posts;
+drop policy if exists "posts own delete" on public.posts;
+
+drop policy if exists "likes public read" on public.likes;
+drop policy if exists "likes own insert" on public.likes;
+drop policy if exists "likes own delete" on public.likes;
+
+drop policy if exists "comments public read" on public.comments;
+drop policy if exists "comments own insert" on public.comments;
+drop policy if exists "comments own update" on public.comments;
+drop policy if exists "comments own delete" on public.comments;
+
+drop policy if exists "follows public read" on public.follows;
+drop policy if exists "follows own insert" on public.follows;
+drop policy if exists "follows own delete" on public.follows;
+
+drop policy if exists "conversation member read" on public.conversations;
+drop policy if exists "conversation creator insert" on public.conversations;
+drop policy if exists "conversation member update" on public.conversations;
+
+drop policy if exists "members see same conversation" on public.conversation_members;
+drop policy if exists "conversation creator can add members" on public.conversation_members;
+drop policy if exists "member can leave" on public.conversation_members;
+
+drop policy if exists "members read messages" on public.messages;
+drop policy if exists "members send messages" on public.messages;
+drop policy if exists "recipient marks read" on public.messages;
+
+drop policy if exists "notification owner read" on public.notifications;
+drop policy if exists "notification owner update" on public.notifications;
+drop policy if exists "notification owner delete" on public.notifications;
+
 -- Profiles
 create policy "profiles public read" on public.profiles for select using (true);
 create policy "profiles own insert" on public.profiles for insert with check (auth.uid()=id);
@@ -280,7 +316,7 @@ create policy "follows public read" on public.follows for select using (true);
 create policy "follows own insert" on public.follows for insert with check (auth.uid()=follower_id);
 create policy "follows own delete" on public.follows for delete using (auth.uid()=follower_id);
 
--- Conversations and messages: only members can read them.
+-- Conversations and messages
 create policy "conversation member read" on public.conversations for select using (public.is_conversation_member(id));
 create policy "conversation creator insert" on public.conversations for insert with check (auth.uid()=created_by);
 create policy "conversation member update" on public.conversations for update using (public.is_conversation_member(id));
@@ -293,7 +329,7 @@ create policy "members read messages" on public.messages for select using (publi
 create policy "members send messages" on public.messages for insert with check (auth.uid()=sender_id and public.is_conversation_member(conversation_id));
 create policy "recipient marks read" on public.messages for update using (public.is_conversation_member(conversation_id)) with check (public.is_conversation_member(conversation_id));
 
--- Notifications are private to their owner. Only database triggers create them.
+-- Notifications
 create policy "notification owner read" on public.notifications for select using (auth.uid()=user_id);
 create policy "notification owner update" on public.notifications for update using (auth.uid()=user_id) with check (auth.uid()=user_id);
 create policy "notification owner delete" on public.notifications for delete using (auth.uid()=user_id);
@@ -303,7 +339,7 @@ grant select on public.profiles,public.posts,public.likes,public.comments,public
 grant insert,update,delete on public.profiles,public.posts,public.likes,public.comments,public.follows to authenticated;
 grant select,insert,update,delete on public.conversations,public.conversation_members,public.messages,public.notifications to authenticated;
 
--- Enable realtime tables used by the frontend. Ignore duplicate-membership errors if rerun.
+-- Realtime setup: duplicate membership is ignored on re-runs.
 do $$
 begin
   begin alter publication supabase_realtime add table public.posts; exception when duplicate_object then null; end;
