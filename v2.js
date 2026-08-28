@@ -1,7 +1,6 @@
 // ============================================================
 // GG.Chat V2 enhancement layer
-// This file intentionally focuses on progressive enhancement.
-// Core social functionality remains in app.js.
+// Progressive UI enhancements for the core app.
 // ============================================================
 
 (() => {
@@ -13,20 +12,16 @@
   const V2 = {
     initialized: false,
     observer: null,
+    observerTimer: null,
     config: window.GG_CONFIG || {},
     connectionBanner: null,
     bootScreen: null,
-    authStatus: null,
     cleanupFns: [],
   };
 
   function safeText(value = '') {
     return String(value).replace(/[&<>"']/g, char => ({
-      '&': '&amp;',
-      '<': '&lt;',
-      '>': '&gt;',
-      '"': '&quot;',
-      "'": '&#39;'
+      '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;'
     }[char]));
   }
 
@@ -38,8 +33,10 @@
   }
 
   function iconRefresh() {
-    if (window.lucide?.createIcons) {
-      window.lucide.createIcons();
+    try {
+      if (window.lucide?.createIcons) window.lucide.createIcons();
+    } catch (error) {
+      console.warn('[GG.Chat V2] Icon refresh skipped:', error);
     }
   }
 
@@ -62,12 +59,7 @@
     const configured = normalizeBaseUrl(V2.config.SUPABASE_URL);
     const expectedPattern = /^https:\/\/[a-z0-9-]+\.supabase\.co$/i;
     const key = V2.config.SUPABASE_ANON_KEY || '';
-
-    const result = {
-      ok: true,
-      messages: [],
-      baseUrl: configured,
-    };
+    const result = { ok: true, messages: [], baseUrl: configured };
 
     if (!configured) {
       result.ok = false;
@@ -85,6 +77,15 @@
     return result;
   }
 
+  function removeBootScreen() {
+    const screen = qs('#ggBootScreen');
+    if (!screen) return;
+    screen.classList.add('is-hidden');
+    window.setTimeout(() => {
+      try { screen.remove(); } catch {}
+    }, 380);
+  }
+
   function addBootScreen() {
     if (qs('#ggBootScreen')) return;
 
@@ -100,10 +101,18 @@
     document.body.prepend(screen);
     V2.bootScreen = screen;
 
+    // Normal close.
+    window.setTimeout(removeBootScreen, 420);
+
+    // Hard fail-safe: never let the loader block the page indefinitely.
     window.setTimeout(() => {
-      screen.classList.add('is-hidden');
-      window.setTimeout(() => screen.remove(), 450);
-    }, 450);
+      const stuck = qs('#ggBootScreen');
+      if (stuck) {
+        stuck.style.pointerEvents = 'none';
+        stuck.style.display = 'none';
+        stuck.remove();
+      }
+    }, 1800);
   }
 
   function addConnectionBanner() {
@@ -118,7 +127,6 @@
     const update = () => {
       const online = navigator.onLine;
       banner.classList.toggle('show', !online);
-
       const status = qs('#ggConnectionStatus');
       if (status) {
         status.classList.toggle('offline', !online);
@@ -142,24 +150,11 @@
 
     const features = createElement('div', 'gg-auth-features');
     features.innerHTML = `
-      <div class="gg-auth-feature">
-        <i data-lucide="messages-square"></i>
-        <strong>Realtime chat</strong>
-        <span>Stuur privéberichten direct naar andere accounts.</span>
-      </div>
-      <div class="gg-auth-feature">
-        <i data-lucide="users-round"></i>
-        <strong>Bouw je netwerk</strong>
-        <span>Volg mensen, ontdek accounts en laat je profiel groeien.</span>
-      </div>
-      <div class="gg-auth-feature">
-        <i data-lucide="badge-check"></i>
-        <strong>Officiële badges</strong>
-        <span>Geverifieerde profielen zijn duidelijk herkenbaar.</span>
-      </div>
+      <div class="gg-auth-feature"><i data-lucide="messages-square"></i><strong>Realtime chat</strong><span>Stuur privéberichten direct naar andere accounts.</span></div>
+      <div class="gg-auth-feature"><i data-lucide="users-round"></i><strong>Bouw je netwerk</strong><span>Volg mensen, ontdek accounts en laat je profiel groeien.</span></div>
+      <div class="gg-auth-feature"><i data-lucide="badge-check"></i><strong>Officiële badges</strong><span>Geverifieerde profielen zijn duidelijk herkenbaar.</span></div>
     `;
     hero.appendChild(features);
-    iconRefresh();
   }
 
   function enhanceAuthCard() {
@@ -168,10 +163,7 @@
     card.dataset.v2Enhanced = '1';
 
     const note = createElement('div', 'gg-auth-note');
-    note.innerHTML = `
-      <i data-lucide="shield-check"></i>
-      <span>Accounts, profielen en berichten worden veilig verwerkt via Supabase. Je wachtwoord wordt niet door GG.Chat zelf opgeslagen.</span>
-    `;
+    note.innerHTML = `<i data-lucide="shield-check"></i><span>Accounts, profielen en berichten worden verwerkt via Supabase.</span>`;
     card.appendChild(note);
 
     const registerForm = qs('#registerForm');
@@ -182,11 +174,7 @@
     }
 
     const loginForm = qs('#loginForm');
-    if (loginForm) {
-      enhanceLoginSubmit(loginForm);
-    }
-
-    iconRefresh();
+    if (loginForm) enhanceLoginSubmit(loginForm);
   }
 
   function enhanceUsernameField(form) {
@@ -195,32 +183,19 @@
 
     input.autocapitalize = 'none';
     input.spellcheck = false;
-    input.inputMode = 'text';
 
     const meta = createElement('div', 'gg-field-meta');
     meta.innerHTML = '<span>3–24 tekens</span><span id="ggUsernameState">letters, cijfers, _ en .</span>';
     input.parentElement.appendChild(meta);
 
     const validate = () => {
-      const raw = input.value;
-      const normalized = raw.toLowerCase().replace(/\s+/g, '');
-
-      if (raw !== normalized) {
-        const start = input.selectionStart;
-        input.value = normalized;
-        try { input.setSelectionRange(start, start); } catch {}
-      }
-
+      const normalized = input.value.toLowerCase().replace(/\s+/g, '');
+      if (input.value !== normalized) input.value = normalized;
       const valid = /^[a-z0-9_.]{3,24}$/.test(input.value);
       meta.classList.toggle('good', valid);
       meta.classList.toggle('bad', input.value.length > 0 && !valid);
-
       const state = qs('#ggUsernameState');
-      if (!state) return;
-
-      if (!input.value) state.textContent = 'letters, cijfers, _ en .';
-      else if (valid) state.textContent = '@' + input.value + ' ziet er goed uit';
-      else state.textContent = 'gebruik alleen geldige tekens';
+      if (state) state.textContent = !input.value ? 'letters, cijfers, _ en .' : valid ? `@${input.value} ziet er goed uit` : 'gebruik alleen geldige tekens';
     };
 
     input.addEventListener('input', validate);
@@ -243,32 +218,18 @@
     const meter = createElement('div', 'gg-password-meter');
     meter.dataset.score = '0';
     meter.innerHTML = '<span></span><span></span><span></span><span></span>';
-
     const meta = createElement('div', 'gg-field-meta');
     meta.innerHTML = '<span id="ggPasswordLabel">Gebruik minimaal 6 tekens</span><span id="ggPasswordLength">0 tekens</span>';
-
-    input.parentElement.appendChild(meter);
-    input.parentElement.appendChild(meta);
+    input.parentElement.append(meter, meta);
 
     const update = () => {
       const value = input.value;
       const score = passwordScore(value);
       meter.dataset.score = String(score);
-
       const label = qs('#ggPasswordLabel');
       const length = qs('#ggPasswordLength');
-
       if (length) length.textContent = `${value.length} tekens`;
-      if (label) {
-        label.textContent = [
-          'Gebruik minimaal 6 tekens',
-          'Zwak wachtwoord',
-          'Redelijk wachtwoord',
-          'Sterk wachtwoord',
-          'Zeer sterk wachtwoord'
-        ][score];
-      }
-
+      if (label) label.textContent = ['Gebruik minimaal 6 tekens','Zwak wachtwoord','Redelijk wachtwoord','Sterk wachtwoord','Zeer sterk wachtwoord'][score];
       meta.classList.toggle('good', score >= 3);
       meta.classList.toggle('bad', value.length > 0 && score <= 1);
     };
@@ -280,52 +241,35 @@
   function attachLoadingState(form, text) {
     form.addEventListener('submit', () => {
       const button = qs('button[type="submit"]', form);
-      if (!button) return;
-
-      button.dataset.originalHtml = button.innerHTML;
+      if (!button || button.dataset.ggLoading === '1') return;
+      button.dataset.ggLoading = '1';
+      const original = button.innerHTML;
       button.classList.add('gg-button-loading');
-
       const label = qs('span', button);
       if (label) label.textContent = text;
 
       window.setTimeout(() => {
         if (!button.isConnected) return;
         button.classList.remove('gg-button-loading');
-        if (button.dataset.originalHtml) {
-          button.innerHTML = button.dataset.originalHtml;
-          iconRefresh();
-        }
-      }, 6500);
+        button.dataset.ggLoading = '0';
+        button.innerHTML = original;
+        iconRefresh();
+      }, 5000);
     }, { capture: true });
   }
 
   function enhanceRegisterSubmit(form) {
     if (form.dataset.v2Submit === '1') return;
     form.dataset.v2Submit = '1';
-
     attachLoadingState(form, 'Account maken...');
 
     form.addEventListener('submit', event => {
       const username = qs('#registerUsername')?.value.trim().toLowerCase() || '';
       const password = qs('#registerPassword')?.value || '';
       const displayName = qs('#registerName')?.value.trim() || '';
-
-      if (!displayName) {
-        event.preventDefault();
-        showLocalAuthError('Vul een weergavenaam in.');
-        return;
-      }
-
-      if (!/^[a-z0-9_.]{3,24}$/.test(username)) {
-        event.preventDefault();
-        showLocalAuthError('Kies een geldige gebruikersnaam van 3–24 tekens.');
-        return;
-      }
-
-      if (password.length < 6) {
-        event.preventDefault();
-        showLocalAuthError('Je wachtwoord moet minimaal 6 tekens bevatten.');
-      }
+      if (!displayName) { event.preventDefault(); showLocalAuthError('Vul een weergavenaam in.'); return; }
+      if (!/^[a-z0-9_.]{3,24}$/.test(username)) { event.preventDefault(); showLocalAuthError('Kies een geldige gebruikersnaam van 3–24 tekens.'); return; }
+      if (password.length < 6) { event.preventDefault(); showLocalAuthError('Je wachtwoord moet minimaal 6 tekens bevatten.'); }
     }, { capture: true });
   }
 
@@ -337,17 +281,13 @@
 
   function showLocalAuthError(message) {
     let box = qs('#ggLocalAuthError');
-
     if (!box) {
       box = createElement('div', 'gg-auth-note');
       box.id = 'ggLocalAuthError';
       box.style.borderColor = 'rgba(255,98,125,.25)';
       box.style.color = '#ffd8df';
-
-      const card = qs('.auth-card');
-      if (card) card.appendChild(box);
+      qs('.auth-card')?.appendChild(box);
     }
-
     box.innerHTML = `<i data-lucide="circle-alert"></i><span>${safeText(message)}</span>`;
     iconRefresh();
   }
@@ -355,57 +295,38 @@
   function enhanceSidebar() {
     const sidebar = qs('.sidebar');
     if (!sidebar || qs('#ggSidebarMeta')) return;
-
     const meta = createElement('div', 'gg-status-pill');
     meta.id = 'ggSidebarMeta';
     meta.innerHTML = '<span>V2 Beta</span>';
-
-    const compose = qs('#composeSidebarBtn');
-    if (compose) compose.insertAdjacentElement('afterend', meta);
+    qs('#composeSidebarBtn')?.insertAdjacentElement('afterend', meta);
   }
 
   function enhanceRightbar() {
     const rightbar = qs('.rightbar');
     if (!rightbar || qs('#ggConnectionStatus')) return;
-
-    const footer = qs('.mini-footer', rightbar);
     const status = createElement('div', 'gg-status-pill');
     status.id = 'ggConnectionStatus';
     status.textContent = navigator.onLine ? 'Online' : 'Offline';
-    status.classList.toggle('offline', !navigator.onLine);
-
+    const footer = qs('.mini-footer', rightbar);
     if (footer) footer.insertAdjacentElement('beforebegin', status);
     else rightbar.appendChild(status);
   }
 
   function enhanceComposer(root = document) {
-    const textareas = qsa('#composerText, #modalPostText', root);
-
-    textareas.forEach(textarea => {
+    qsa('#composerText, #modalPostText', root).forEach(textarea => {
       if (textarea.dataset.v2Enhanced === '1') return;
       textarea.dataset.v2Enhanced = '1';
-
-      const tools = textarea.closest('.composer')?.querySelector('.composer-tools') ||
-        textarea.parentElement?.querySelector('.modal-actions');
-
+      const tools = textarea.closest('.composer')?.querySelector('.composer-tools') || textarea.parentElement?.querySelector('.modal-actions');
       if (!tools) return;
-
       const counter = createElement('span', 'gg-composer-counter');
       const max = Number(textarea.maxLength || 1000);
-
       const update = () => {
         const remaining = Math.max(0, max - textarea.value.length);
         counter.textContent = String(remaining);
         counter.classList.toggle('warning', remaining <= 100 && remaining > 30);
         counter.classList.toggle('danger', remaining <= 30);
       };
-
-      if (tools.firstElementChild) {
-        tools.firstElementChild.insertAdjacentElement('afterend', counter);
-      } else {
-        tools.prepend(counter);
-      }
-
+      tools.appendChild(counter);
       textarea.addEventListener('input', update);
       update();
     });
@@ -415,38 +336,14 @@
     const input = qs('#globalSearch');
     if (!input || input.dataset.v2Enhanced === '1') return;
     input.dataset.v2Enhanced = '1';
-
     input.setAttribute('aria-label', 'Zoeken op GG.Chat');
-
-    input.addEventListener('focus', () => {
-      input.closest('.search-box')?.classList.add('focused');
-    });
-
-    input.addEventListener('blur', () => {
-      input.closest('.search-box')?.classList.remove('focused');
-    });
   }
 
   function enhanceButtons(root = document) {
     qsa('button', root).forEach(button => {
       if (button.dataset.v2A11y === '1') return;
       button.dataset.v2A11y = '1';
-
-      if (!button.getAttribute('type') && button.closest('form')) {
-        button.type = 'button';
-      }
-
-      button.addEventListener('pointerdown', () => {
-        button.style.transform = 'scale(.985)';
-      });
-
-      const release = () => {
-        button.style.removeProperty('transform');
-      };
-
-      button.addEventListener('pointerup', release);
-      button.addEventListener('pointercancel', release);
-      button.addEventListener('pointerleave', release);
+      if (!button.getAttribute('type') && button.closest('form')) button.type = 'button';
     });
   }
 
@@ -459,33 +356,41 @@
     });
   }
 
+  function runDynamicEnhancements() {
+    enhanceComposer();
+    enhanceButtons();
+    enhanceExternalLinks();
+  }
+
   function observeDynamicUi() {
     if (V2.observer) return;
 
     V2.observer = new MutationObserver(mutations => {
-      const relevant = mutations.some(mutation => mutation.addedNodes.length > 0);
-      if (!relevant) return;
+      const hasRelevantNode = mutations.some(mutation =>
+        [...mutation.addedNodes].some(node =>
+          node.nodeType === 1 &&
+          node.tagName !== 'SVG' &&
+          node.tagName !== 'PATH' &&
+          !node.closest?.('svg')
+        )
+      );
 
-      enhanceComposer();
-      enhanceButtons();
-      enhanceExternalLinks();
-      iconRefresh();
+      if (!hasRelevantNode) return;
+      clearTimeout(V2.observerTimer);
+      V2.observerTimer = window.setTimeout(runDynamicEnhancements, 60);
     });
 
-    V2.observer.observe(document.body, {
-      childList: true,
-      subtree: true,
-    });
+    V2.observer.observe(document.body, { childList: true, subtree: true });
   }
 
   function installGlobalErrorGuard() {
     window.addEventListener('error', event => {
-      const message = event?.message || 'Onbekende fout';
-      console.error('[GG.Chat V2] Runtime error:', event.error || message);
+      console.error('[GG.Chat V2] Runtime error:', event.error || event?.message || 'Onbekende fout');
+      removeBootScreen();
     });
-
     window.addEventListener('unhandledrejection', event => {
       console.error('[GG.Chat V2] Unhandled promise rejection:', event.reason);
+      removeBootScreen();
     });
   }
 
@@ -493,19 +398,11 @@
     document.addEventListener('keydown', event => {
       if (event.metaKey || event.ctrlKey || event.altKey) return;
       if (['INPUT', 'TEXTAREA'].includes(document.activeElement?.tagName)) return;
-
       if (event.key.toLowerCase() === 'n') {
         const compose = qs('#composeSidebarBtn');
         if (compose && !qs('#app')?.classList.contains('hidden')) {
           event.preventDefault();
           compose.click();
-        }
-      }
-
-      if (event.key.toLowerCase() === 'g') {
-        const home = qs('[data-route="home"]');
-        if (home && !qs('#app')?.classList.contains('hidden')) {
-          home.focus();
         }
       }
     });
@@ -514,23 +411,15 @@
   function showConfigurationWarning() {
     const result = validateConfig();
     if (result.ok) return;
-
     const auth = qs('.auth-card');
     if (!auth) return;
-
-    const existing = qs('#ggConfigWarning');
-    if (existing) existing.remove();
-
+    qs('#ggConfigWarning')?.remove();
     const warning = createElement('div', 'gg-auth-note');
     warning.id = 'ggConfigWarning';
     warning.style.borderColor = 'rgba(255,200,90,.24)';
     warning.style.color = '#ffe8ae';
-    warning.innerHTML = `
-      <i data-lucide="triangle-alert"></i>
-      <span><strong>Backend-configuratie controleren.</strong><br>${result.messages.map(safeText).join(' ')}</span>
-    `;
+    warning.innerHTML = `<i data-lucide="triangle-alert"></i><span><strong>Backend-configuratie controleren.</strong><br>${result.messages.map(safeText).join(' ')}</span>`;
     auth.appendChild(warning);
-    iconRefresh();
   }
 
   function markVersion() {
@@ -542,33 +431,31 @@
     if (V2.initialized) return;
     V2.initialized = true;
 
+    installGlobalErrorGuard();
     markVersion();
     addBootScreen();
-    addConnectionBanner();
-    enhanceAuthHero();
-    enhanceAuthCard();
-    enhanceSidebar();
-    enhanceRightbar();
-    enhanceSearch();
-    enhanceComposer();
-    enhanceButtons();
-    enhanceExternalLinks();
-    observeDynamicUi();
-    installGlobalErrorGuard();
-    installKeyboardShortcuts();
-    showConfigurationWarning();
-    iconRefresh();
 
-    console.info(
-      `%cGG.Chat ${V2.config.APP_VERSION || 'V2'}%c frontend ready`,
-      'background:#7768ff;color:#fff;padding:4px 7px;border-radius:6px;font-weight:800',
-      'color:#9da6b5'
-    );
+    try {
+      addConnectionBanner();
+      enhanceAuthHero();
+      enhanceAuthCard();
+      enhanceSidebar();
+      enhanceRightbar();
+      enhanceSearch();
+      enhanceComposer();
+      enhanceButtons();
+      enhanceExternalLinks();
+      observeDynamicUi();
+      installKeyboardShortcuts();
+      showConfigurationWarning();
+      iconRefresh();
+    } catch (error) {
+      console.error('[GG.Chat V2] Enhancement init failed:', error);
+    } finally {
+      window.setTimeout(removeBootScreen, 450);
+    }
   }
 
-  if (document.readyState === 'loading') {
-    document.addEventListener('DOMContentLoaded', init, { once: true });
-  } else {
-    init();
-  }
+  if (document.readyState === 'loading') document.addEventListener('DOMContentLoaded', init, { once: true });
+  else init();
 })();
