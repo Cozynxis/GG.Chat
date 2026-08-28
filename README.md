@@ -26,6 +26,29 @@ Een complete social-media webapp voor GitHub Pages + Supabase.
 - Responsive desktop- en mobiele UI
 - RLS-beveiliging in Supabase
 - Badgevelden zijn beschermd tegen zelf-toekennen vanuit de browser
+- V2 auth-interface met extra validatie en wachtwoordsterkte
+- Online/offline status
+- Extra loading states, animaties en UI feedback
+- Progressive enhancement via `v2.js` en `v2.css`
+
+## Belangrijke fix: Supabase Project URL
+
+`SUPABASE_URL` moet altijd alleen de project-base-URL zijn.
+
+Goed:
+
+```text
+https://jouwproject.supabase.co
+```
+
+Fout:
+
+```text
+https://jouwproject.supabase.co/rest/v1/
+https://jouwproject.supabase.co/auth/v1/
+```
+
+De Supabase JavaScript client voegt zelf `/rest/v1`, `/auth/v1` en andere API-routes toe. Als je `/rest/v1/` al in `config.js` zet, worden ongeldige Auth-URLs opgebouwd en kun je fouten krijgen zoals **Invalid path requested URL**.
 
 ## 1. Supabase maken
 
@@ -34,13 +57,13 @@ Een complete social-media webapp voor GitHub Pages + Supabase.
 3. Kopieer de volledige inhoud van `supabase-schema.sql`.
 4. Voer het script uit.
 5. Ga daarna naar **Project Settings > API**.
-6. Kopieer je Project URL en je `anon` / public key.
+6. Kopieer je Project URL en je publishable / anon key.
 
 Gebruik **NOOIT** de `service_role` key in deze repository. Die key geeft beheerdersrechten en hoort alleen op een beveiligde server.
 
 ## 2. config.js instellen
 
-Open `config.js` en wijzig:
+Open `config.js` en gebruik alleen de project-base-URL:
 
 ```js
 window.GG_CONFIG = {
@@ -49,21 +72,32 @@ window.GG_CONFIG = {
 };
 ```
 
-De anon key mag in een frontend staan. De beveiliging wordt door de Row Level Security policies in `supabase-schema.sql` afgedwongen.
+In deze repo staat de configuratie inmiddels in V2-formaat met extra appgegevens en een GitHub Pages-veilige base/redirect URL.
+
+De publishable/anon key mag in frontendcode staan. De beveiliging wordt door de Row Level Security policies in `supabase-schema.sql` afgedwongen.
 
 ## 3. Authentication instellen
 
 Ga in Supabase naar **Authentication > URL Configuration**.
 
-Voor GitHub Pages zet je de Site URL bijvoorbeeld op:
+Voor deze repository zet je de Site URL op:
 
 ```text
 https://cozynxis.github.io/GG.Chat/
 ```
 
-Voeg dezelfde URL ook toe aan de Redirect URLs.
+Voeg bij **Redirect URLs** minimaal ook toe:
 
-Je kunt bij **Authentication > Providers > Email** instellen of een gebruiker eerst zijn e-mail moet bevestigen.
+```text
+https://cozynxis.github.io/GG.Chat/
+https://cozynxis.github.io/GG.Chat/**
+```
+
+Gebruik daar geen `/rest/v1/` of `/auth/v1/` URL.
+
+Als je een eigen domein gebruikt, voeg dat domein apart toe aan zowel de Site URL/redirect-configuratie als Redirect URLs.
+
+Je kunt bij **Authentication > Providers > Email** bepalen of een nieuw account eerst zijn e-mailadres moet bevestigen.
 
 ## 4. GitHub Pages aanzetten
 
@@ -78,6 +112,17 @@ Kies:
 - Folder: `/ (root)`
 
 Daarna wordt de website via GitHub Pages gepubliceerd.
+
+## Als account maken nog niet werkt
+
+Controleer deze punten in deze volgorde:
+
+1. `config.js` gebruikt `https://...supabase.co` zonder `/rest/v1/`.
+2. Het volledige `supabase-schema.sql` is zonder fouten uitgevoerd.
+3. **Authentication > Providers > Email** is ingeschakeld.
+4. **Authentication > URL Configuration** bevat de correcte GitHub Pages URL.
+5. Je hebt na een wijziging aan GitHub Pages even de nieuwste deployment geopend/ververst.
+6. Open DevTools > Console en Network om de exacte Supabase-fout te bekijken wanneer de registratie wordt afgewezen.
 
 ## Officieel vinkje geven
 
@@ -107,12 +152,35 @@ De huidige knop verwijdert het openbare `profiles` record, waarna gekoppelde soc
 
 ## Bestanden
 
-- `index.html` — volledige applicatiestructuur
-- `style.css` — desktop/mobiele interface en animaties
+- `index.html` — hoofdstructuur van de applicatie
+- `style.css` — oorspronkelijke desktop/mobiele interface
+- `v2.css` — V2 visual system, animaties, auth- en responsive verbeteringen
 - `app.js` — auth, posts, likes, follows, profiles, search, DM's en meldingen
-- `config.js` — Supabase public configuratie
+- `v2.js` — extra validatie, loading states, connection status, shortcuts en progressive enhancement
+- `config.js` — Supabase public configuratie en appconfiguratie
 - `supabase-schema.sql` — database, triggers, policies en realtime setup
+
+## V2 UI
+
+De V2-laag is expres opgesplitst. Daardoor blijft de bestaande functionele app bruikbaar, terwijl de interface en aanvullende clientlogica veel uitgebreider kunnen worden zonder alle code in één gigantisch bestand te stoppen.
+
+V2 voegt onder andere toe:
+
+- boot/loading screen
+- uitgebreider login- en registratieontwerp
+- realtime gebruikersnaamvalidatie in de interface
+- wachtwoordsterkte-indicator
+- verbeterde focus states
+- verbeterde buttons en micro-animaties
+- connection/offline banner
+- V2 status indicators
+- verbeterde composer counters
+- uitgebreidere responsive styling
+- reduced-motion ondersteuning
+- browser error logging
+- keyboard shortcuts
+- automatische progressive enhancement voor dynamisch ingeladen onderdelen
 
 ## Volgende uitbreidingen
 
-De huidige basis is geschikt om verder uit te bouwen met onder andere file uploads via Supabase Storage, groeps-DM's, reposts, bookmarks, hashtags, moderatie, rapportages, notificatie-instellingen, custom themes, admin dashboard en push notifications.
+De huidige basis is geschikt om verder uit te bouwen met Supabase Storage uploads, groeps-DM's, reposts, bookmarks, hashtags, mentions, moderatie, rapportages, notificatie-instellingen, custom themes, admin dashboard, account bans, push notifications, stories en uitgebreidere discovery.
