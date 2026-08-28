@@ -1,6 +1,5 @@
 /* GG.Chat temporary public admin gate.
-   IMPORTANT: this is intentionally NOT secure. Anyone can inspect frontend source.
-   The real database admin RPCs remain protected separately.
+   TEST MODE ONLY: this password lives in frontend code and is not secure.
 */
 (() => {
   'use strict';
@@ -8,7 +7,6 @@
   const cfg = window.GG_CONFIG || {};
   const PASSWORD = String(cfg.PUBLIC_ADMIN_PASSWORD || '');
   const SESSION_KEY = 'gg_public_admin_unlocked';
-
   const $ = (s, root = document) => root.querySelector(s);
 
   function icons(root = document) {
@@ -40,10 +38,16 @@
     icons(btn);
   }
 
-  function openGate() {
-    if (sessionStorage.getItem(SESSION_KEY) === '1') {
-      return triggerRealAdmin();
+  function openPanel() {
+    if (window.GGPublicAdminPanel?.open) {
+      window.GGPublicAdminPanel.open();
+      return;
     }
+    toast('Admin Panel kon niet laden. Vernieuw de pagina.', 'error');
+  }
+
+  function openGate() {
+    if (sessionStorage.getItem(SESSION_KEY) === '1') return openPanel();
 
     document.querySelector('.gg-public-admin-overlay')?.remove();
     const overlay = document.createElement('div');
@@ -52,7 +56,7 @@
       <form class="gg-admin-lock" id="ggPublicAdminForm">
         <div class="gg-admin-lock-icon"><i data-lucide="key-round"></i></div>
         <h2>Admin Panel</h2>
-        <p>Voer het tijdelijke admin-wachtwoord in om verder te gaan.</p>
+        <p>Voer het tijdelijke testwachtwoord in.</p>
         <label>Wachtwoord
           <input id="ggPublicAdminPassword" type="password" autocomplete="off" placeholder="Admin-wachtwoord" required autofocus>
         </label>
@@ -60,7 +64,7 @@
           <button type="button" class="gg-admin-btn" id="ggPublicAdminCancel">Annuleren</button>
           <button type="submit" class="gg-admin-btn primary"><i data-lucide="unlock"></i> Open Admin Panel</button>
         </div>
-        <p class="gg-admin-security-note"><i data-lucide="triangle-alert"></i> Tijdelijke testmodus: dit wachtwoord staat in de publieke frontend en is dus niet geschikt voor productie.</p>
+        <p class="gg-admin-security-note"><i data-lucide="triangle-alert"></i> Testmodus: iedereen die het frontendwachtwoord kent kan deze console openen.</p>
       </form>`;
     document.body.appendChild(overlay);
     icons(overlay);
@@ -69,43 +73,18 @@
     overlay.addEventListener('mousedown', e => { if (e.target === overlay) overlay.remove(); });
     $('#ggPublicAdminForm', overlay).onsubmit = e => {
       e.preventDefault();
-      const value = $('#ggPublicAdminPassword', overlay).value;
+      const input = $('#ggPublicAdminPassword', overlay);
+      const value = input.value;
       if (!PASSWORD || value !== PASSWORD) {
-        $('#ggPublicAdminPassword', overlay).value = '';
-        $('#ggPublicAdminPassword', overlay).focus();
+        input.value = '';
+        input.focus();
         return toast('Onjuist admin-wachtwoord.', 'error');
       }
       sessionStorage.setItem(SESSION_KEY, '1');
       overlay.remove();
       toast('Admin Panel ontgrendeld.');
-      triggerRealAdmin();
+      openPanel();
     };
-  }
-
-  function triggerRealAdmin() {
-    // The existing admin.js remains responsible for privileged database actions.
-    // If its button exists, use it. Otherwise show a clear message instead of silently failing.
-    const real = $('#ggAdminNav');
-    if (real) {
-      real.click();
-      return;
-    }
-
-    document.querySelector('.gg-public-admin-info')?.remove();
-    const overlay = document.createElement('div');
-    overlay.className = 'gg-admin-lock-overlay gg-public-admin-info';
-    overlay.innerHTML = `
-      <div class="gg-admin-lock">
-        <div class="gg-admin-lock-icon"><i data-lucide="shield-check"></i></div>
-        <h2>Frontend ontgrendeld</h2>
-        <p>De simpele openbare wachtwoordlaag is goedgekeurd. Voor echte beheeracties moet je huidige account nog database-adminrechten hebben.</p>
-        <div class="gg-admin-lock-actions">
-          <button class="gg-admin-btn primary" id="ggPublicAdminClose">Sluiten</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    $('#ggPublicAdminClose', overlay).onclick = () => overlay.remove();
-    icons(overlay);
   }
 
   function init() {
